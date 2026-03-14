@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NoteFlow — Organize your thoughts</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0e1117;
+      --bg2: #161b25;
+      --bg3: #1e2535;
+      --border: rgba(255,255,255,0.08);
+      --border-hover: rgba(255,255,255,0.16);
+      --accent: #f0a050;
+      --accent2: #f0c080;
+      --text: #eef0f4;
+      --text2: #8a94a8;
+      --text3: #4f5870;
+      --radius: 16px;
+      --radius-sm: 10px;
+    }
+    html, body { min-height: 100vh; background: var(--bg); }
+    body { font-family: 'DM Sans', sans-serif; color: var(--text); }
+
+    .app { max-width: 720px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+
+    /* Header */
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-mark { width: 36px; height: 36px; border-radius: 10px; background: #18120a; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .logo-name { font-family: 'Sora', sans-serif; font-size: 18px; font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
+    .logo-name span { color: var(--accent); }
+    .hist-btn { padding: 7px 14px; font-size: 12px; font-family: 'DM Sans', sans-serif; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg2); color: var(--text2); cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+    .hist-btn:hover { border-color: var(--border-hover); color: var(--text); }
+
+    /* Layout */
+    .layout { display: grid; grid-template-columns: 1fr; gap: 1.25rem; }
+    .layout.with-history { grid-template-columns: 210px 1fr; }
+
+    /* History panel */
+    .history-panel { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; display: none; }
+    .history-panel.visible { display: block; }
+    .history-header { padding: 12px 14px; font-size: 12px; font-weight: 500; color: var(--text2); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .clear-btn { font-size: 11px; color: #e05050; cursor: pointer; background: none; border: none; font-family: inherit; }
+    .history-list { overflow-y: auto; max-height: 460px; }
+    .history-item { padding: 10px 14px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.1s; }
+    .history-item:hover { background: var(--bg3); }
+    .history-item:last-child { border-bottom: none; }
+    .hi-title { font-size: 12px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hi-meta { font-size: 11px; color: var(--text3); margin-top: 3px; display: flex; gap: 6px; }
+    .hi-badge { padding: 1px 7px; border-radius: 99px; background: var(--bg3); color: var(--text2); font-size: 10px; }
+    .empty-history { padding: 2rem; text-align: center; font-size: 13px; color: var(--text3); }
+
+    /* Input tabs */
+    .input-tabs { display: flex; gap: 6px; margin-bottom: 1rem; }
+    .tab-btn { padding: 7px 16px; font-size: 13px; font-family: 'DM Sans', sans-serif; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg2); color: var(--text2); cursor: pointer; transition: all 0.15s; }
+    .tab-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(240,160,80,0.08); }
+    .input-panel { display: none; }
+    .input-panel.visible { display: block; }
+
+    /* Textarea */
+    textarea { width: 100%; min-height: 130px; padding: 14px 16px; font-size: 14px; font-family: 'DM Sans', sans-serif; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg2); color: var(--text); resize: vertical; line-height: 1.7; transition: border-color 0.15s; }
+    textarea::placeholder { color: var(--text3); }
+    textarea:focus { outline: none; border-color: rgba(240,160,80,0.4); }
+
+    /* Upload zone */
+    .upload-zone { border: 1px dashed var(--border-hover); border-radius: var(--radius); padding: 2rem; text-align: center; cursor: pointer; background: var(--bg2); transition: all 0.15s; }
+    .upload-zone:hover { border-color: rgba(240,160,80,0.4); background: var(--bg3); }
+    .upload-zone input { display: none; }
+    .upload-zone p { font-size: 14px; color: var(--text2); }
+    .upload-zone .filename { font-size: 13px; font-weight: 500; color: var(--accent); margin-top: 6px; }
+    .char-count { font-size: 12px; color: var(--text3); text-align: right; margin-top: 6px; margin-bottom: 1rem; }
+
+    /* Tools grid */
+    .tools-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 1.25rem 0; }
+    .tool-btn { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; cursor: pointer; text-align: left; position: relative; transition: all 0.15s; }
+    .tool-btn:hover:not(.locked) { border-color: var(--border-hover); background: var(--bg3); }
+    .tool-btn.active { border-color: var(--accent); background: rgba(240,160,80,0.07); }
+    .tool-btn.locked { opacity: 0.45; cursor: default; }
+    .tool-name { font-size: 13px; font-weight: 500; color: var(--text); margin-top: 6px; }
+    .tool-desc { font-size: 11px; color: var(--text2); margin-top: 2px; line-height: 1.4; }
+    .free-badge { font-size: 10px; background: rgba(60,200,120,0.15); color: #4cba7a; padding: 2px 8px; border-radius: 99px; display: inline-block; font-weight: 500; }
+    .pro-badge { font-size: 10px; background: rgba(240,160,80,0.15); color: var(--accent); padding: 2px 8px; border-radius: 99px; display: inline-block; font-weight: 500; }
+
+    /* Run button */
+    .run-btn { width: 100%; padding: 12px; font-size: 14px; font-weight: 500; font-family: 'DM Sans', sans-serif; border: none; border-radius: var(--radius); background: linear-gradient(135deg, #f0a050, #e07830); color: #1a0e00; cursor: pointer; transition: opacity 0.15s, transform 0.1s; }
+    .run-btn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+    .run-btn:disabled { opacity: 0.35; cursor: default; transform: none; }
+
+    /* Output */
+    .output-card { margin-top: 1.5rem; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .output-text { padding: 1.25rem 1.5rem; font-size: 14px; color: var(--text); line-height: 1.85; white-space: pre-wrap; }
+    .progress-wrap { height: 2px; background: var(--bg3); }
+    .progress-bar { height: 2px; background: var(--accent); width: 0%; transition: width 0.3s linear; }
+
+    /* TTS bar */
+    .tts-bar { display: flex; align-items: center; gap: 10px; padding: 10px 1.25rem; border-top: 1px solid var(--border); background: var(--bg); flex-wrap: wrap; }
+    .tts-btn { padding: 6px 14px; font-size: 13px; font-family: 'DM Sans', sans-serif; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg2); color: var(--text2); cursor: pointer; transition: all 0.15s; }
+    .tts-btn:hover { border-color: var(--border-hover); color: var(--text); }
+    .tts-btn.playing { border-color: var(--accent); color: var(--accent); background: rgba(240,160,80,0.08); }
+    .copy-btn { padding: 6px 14px; font-size: 13px; font-family: 'DM Sans', sans-serif; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg2); color: var(--text2); cursor: pointer; margin-left: auto; transition: all 0.15s; }
+    .copy-btn:hover { color: var(--text); border-color: var(--border-hover); }
+    .tts-speed { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); }
+    .tts-speed input[type=range] { accent-color: var(--accent); width: 70px; }
+    .speed-val { font-size: 12px; font-weight: 500; color: var(--text); min-width: 30px; }
+
+    /* Flashcards */
+    .flashcard-area { margin-top: 1.5rem; }
+    .fc-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+    .fc-counter { font-size: 13px; color: var(--text2); }
+    .fc-nav { display: flex; gap: 8px; }
+    .fc-nav button { padding: 6px 14px; font-size: 13px; font-family: 'DM Sans', sans-serif; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg2); color: var(--text2); cursor: pointer; transition: all 0.15s; }
+    .fc-nav button:hover { border-color: var(--border-hover); color: var(--text); }
+    .fc-nav button:disabled { opacity: 0.3; cursor: default; }
+    .flashcard { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 2.25rem 1.75rem; min-height: 170px; cursor: pointer; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; transition: border-color 0.15s; }
+    .flashcard:hover { border-color: rgba(240,160,80,0.3); }
+    .fc-label { font-size: 10px; font-weight: 500; color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em; }
+    .fc-content { font-size: 15px; color: var(--text); line-height: 1.6; font-weight: 500; }
+    .fc-answer { font-size: 13px; color: var(--text2); line-height: 1.6; display: none; margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--border); width: 100%; }
+    .fc-hint { font-size: 12px; color: var(--text3); }
+    .fc-dots { display: flex; gap: 6px; justify-content: center; margin-top: 1rem; flex-wrap: wrap; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--bg3); }
+    .dot.active { background: var(--accent); }
+
+    /* Infographic */
+    .infographic { margin-top: 1.5rem; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .ig-header { padding: 1.25rem 1.5rem 1rem; border-bottom: 1px solid var(--border); }
+    .ig-title { font-size: 17px; font-weight: 700; font-family: 'Sora', sans-serif; color: var(--text); }
+    .ig-subtitle { font-size: 13px; color: var(--text2); margin-top: 4px; }
+    .ig-body { padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+    .ig-stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+    .ig-stat { background: var(--bg3); border-radius: var(--radius-sm); padding: 14px; text-align: center; }
+    .ig-stat-num { font-size: 22px; font-weight: 700; font-family: 'Sora', sans-serif; color: var(--accent); }
+    .ig-stat-label { font-size: 11px; color: var(--text2); margin-top: 3px; line-height: 1.4; }
+    .ig-section { border-left: 2px solid var(--accent); padding-left: 14px; }
+    .ig-section-title { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 7px; }
+    .ig-points { display: flex; flex-direction: column; gap: 6px; }
+    .ig-point { font-size: 13px; color: var(--text2); line-height: 1.5; display: flex; gap: 8px; }
+    .ig-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); margin-top: 7px; flex-shrink: 0; opacity: 0.6; }
+    .ig-takeaway { background: rgba(240,160,80,0.08); border: 1px solid rgba(240,160,80,0.2); border-radius: var(--radius-sm); padding: 12px 16px; font-size: 13px; color: var(--accent2); line-height: 1.6; }
+    .ig-footer { padding: 10px 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; }
+
+    /* Pro modal */
+    .pro-modal { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; text-align: center; margin-top: 1.5rem; }
+    .pro-modal h3 { font-size: 16px; font-weight: 700; font-family: 'Sora', sans-serif; color: var(--text); margin-bottom: 6px; }
+    .pro-modal p { font-size: 13px; color: var(--text2); margin-bottom: 1rem; line-height: 1.6; }
+    .upgrade-btn { padding: 10px 24px; font-size: 13px; font-family: 'DM Sans', sans-serif; border: none; border-radius: var(--radius-sm); background: linear-gradient(135deg, #f0a050, #e07830); color: #1a0e00; cursor: pointer; font-weight: 500; margin-right: 8px; }
+    .dismiss-btn { padding: 10px 16px; font-size: 13px; font-family: 'DM Sans', sans-serif; border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent; color: var(--text2); cursor: pointer; }
+    .loading-msg { padding: 2rem; font-size: 14px; color: var(--text2); font-style: italic; text-align: center; }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .tools-grid { grid-template-columns: 1fr 1fr; }
+      .layout.with-history { grid-template-columns: 1fr; }
+      .history-panel.visible { display: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <div class="logo">
+      <div class="logo-mark">
+        <svg width="22" height="22" viewBox="0 0 64 64" fill="none">
+          <line x1="14" y1="52" x2="28" y2="38" stroke="#f0a050" stroke-width="2.5" stroke-linecap="round" opacity="0.15"/>
+          <line x1="14" y1="52" x2="32" y2="34" stroke="#f0a050" stroke-width="3" stroke-linecap="round" opacity="0.25"/>
+          <line x1="14" y1="52" x2="36" y2="30" stroke="#f0a050" stroke-width="3.5" stroke-linecap="round" opacity="0.4"/>
+          <path d="M 14,52 C 22,44 34,30 50,14" stroke="#f0a050" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.7"/>
+          <circle cx="51" cy="13" r="5.5" fill="#f0a050"/>
+          <circle cx="51" cy="13" r="3" fill="#ffe0a0"/>
+        </svg>
+      </div>
+      <span class="logo-name">Note<span>Flow</span></span>
+    </div>
+    <button class="hist-btn" onclick="toggleHistory()" id="hist-toggle">History</button>
+  </div>
+
+  <div class="layout" id="layout">
+    <div class="history-panel" id="history-panel">
+      <div class="history-header">
+        <span>Recent</span>
+        <button class="clear-btn" onclick="clearHistory()">Clear all</button>
+      </div>
+      <div class="history-list" id="history-list"></div>
+    </div>
+
+    <div class="main-col">
+      <div class="input-tabs">
+        <button class="tab-btn active" onclick="switchTab('text', this)">Paste text</button>
+        <button class="tab-btn" onclick="switchTab('pdf', this)">Upload PDF</button>
+      </div>
+
+      <div class="input-panel visible" id="panel-text">
+        <textarea id="text-input" placeholder="Dump your thoughts — lecture notes, meeting minutes, rough ideas, anything..." oninput="updateCount()"></textarea>
+        <div class="char-count" id="char-count">0 characters</div>
+      </div>
+
+      <div class="input-panel" id="panel-pdf">
+        <div class="upload-zone" onclick="document.getElementById('pdf-input').click()">
+          <input type="file" id="pdf-input" accept=".pdf" onchange="handlePDF(this)">
+          <p>Click to upload a PDF</p>
+          <div class="filename" id="filename"></div>
+        </div>
+        <div class="char-count" id="pdf-count" style="margin-top:8px"></div>
+      </div>
+
+      <div class="tools-grid">
+        <button class="tool-btn active" onclick="selectTool('summary', this)">
+          <span class="free-badge">Free</span>
+          <div class="tool-name">Structured note</div>
+          <div class="tool-desc">Clean summary with sections</div>
+        </button>
+        <button class="tool-btn" onclick="selectTool('flashcards', this)">
+          <span class="free-badge">Free</span>
+          <div class="tool-name">Flashcards</div>
+          <div class="tool-desc">Study cards from your content</div>
+        </button>
+        <button class="tool-btn" onclick="selectTool('infographic', this)">
+          <span class="pro-badge">Pro</span>
+          <div class="tool-name">Infographic</div>
+          <div class="tool-desc">Visual layout of key insights</div>
+        </button>
+        <button class="tool-btn locked" onclick="showProModal('generic')">
+          <span class="pro-badge">Pro</span>
+          <div class="tool-name" style="padding-right:18px">Project plan</div>
+          <div class="tool-desc">Actionable steps from ideas</div>
+          <span style="position:absolute;top:12px;right:12px;font-size:12px;color:#4f5870">🔒</span>
+        </button>
+      </div>
+
+      <button class="run-btn" id="run-btn" onclick="runTool()">Organize my thoughts</button>
+      <div id="output-area"></div>
+      <div id="pro-modal-area"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let currentTool = 'summary';
+let currentTab = 'text';
+let pdfText = '';
+let outputText = '';
+let utterance = null;
+let isSpeaking = false;
+let cards = [];
+let cardIndex = 0;
+let history = [];
+let historyVisible = false;
+let isPro = false;
+
+const ANTHROPIC_API_KEY = 'YOUR_API_KEY_HERE';
+
+function toggleHistory() {
+  historyVisible = !historyVisible;
+  document.getElementById('history-panel').classList.toggle('visible', historyVisible);
+  document.getElementById('layout').classList.toggle('with-history', historyVisible);
+  document.getElementById('hist-toggle').textContent = historyVisible ? 'Hide' : 'History';
+  renderHistoryList();
+}
+
+function saveToHistory(input, output, tool) {
+  const snippet = input.slice(0, 40).replace(/\n/g, ' ') + (input.length > 40 ? '...' : '');
+  history.unshift({ snippet, output, tool, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), cards: tool === 'flashcards' ? [...cards] : null });
+  if (history.length > 20) history.pop();
+  renderHistoryList();
+}
+
+function renderHistoryList() {
+  const el = document.getElementById('history-list');
+  if (!history.length) { el.innerHTML = '<div class="empty-history">No history yet</div>'; return; }
+  el.innerHTML = history.map((h, i) => `
+    <div class="history-item" onclick="loadHistory(${i})">
+      <div class="hi-title">${h.snippet}</div>
+      <div class="hi-meta"><span class="hi-badge">${h.tool}</span><span>${h.time}</span></div>
+    </div>`).join('');
+}
+
+function loadHistory(i) {
+  const h = history[i];
+  if (h.tool === 'flashcards' && h.cards) { cards = h.cards; cardIndex = 0; renderCurrentCard(); }
+  else if (h.tool === 'infographic') { try { renderInfographic(JSON.parse(h.output.replace(/```json|```/g,'').trim())); } catch { renderSummary(h.output); } }
+  else { renderSummary(h.output); }
+}
+
+function clearHistory() { history = []; renderHistoryList(); }
+
+function switchTab(tab, el) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-text').classList.toggle('visible', tab === 'text');
+  document.getElementById('panel-pdf').classList.toggle('visible', tab === 'pdf');
+}
+
+function selectTool(tool, el) {
+  if (tool === 'infographic' && !isPro) { showProModal('infographic'); return; }
+  currentTool = tool;
+  document.querySelectorAll('.tool-btn:not(.locked)').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  const labels = { summary: 'Organize my thoughts', flashcards: 'Generate flashcards', infographic: 'Create infographic' };
+  document.getElementById('run-btn').textContent = labels[tool];
+}
+
+function updateCount() {
+  const len = document.getElementById('text-input').value.length;
+  document.getElementById('char-count').textContent = len + ' characters';
+}
+
+async function handlePDF(input) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById('filename').textContent = file.name;
+  document.getElementById('pdf-count').textContent = 'Reading PDF...';
+  try {
+    const ab = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+    let text = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map(item => item.str).join(' ') + '\n';
+    }
+    pdfText = text.trim();
+    document.getElementById('pdf-count').textContent = pdfText.length + ' characters from ' + pdf.numPages + ' pages';
+  } catch(e) { document.getElementById('pdf-count').textContent = 'Could not read PDF.'; }
+}
+
+function getInputText() { return currentTab === 'pdf' ? pdfText : document.getElementById('text-input').value.trim(); }
+
+function showProModal(type) {
+  const isInfo = type === 'infographic';
+  document.getElementById('pro-modal-area').innerHTML = `
+    <div class="pro-modal">
+      <h3>${isInfo ? 'Infographic is Pro' : 'Unlock Pro'}</h3>
+      <p>${isInfo ? 'Turn any text into a beautiful visual infographic. Available in NoteFlow Pro for $7/month.' : 'Unlock all Pro tools for $7/month.'}</p>
+      <button class="upgrade-btn" onclick="activatePro()">Upgrade to Pro</button>
+      <button class="dismiss-btn" onclick="document.getElementById('pro-modal-area').innerHTML=''">Maybe later</button>
+    </div>`;
+}
+
+function activatePro() {
+  isPro = true;
+  document.getElementById('pro-modal-area').innerHTML = '';
+  document.querySelectorAll('.tool-btn.locked').forEach(btn => btn.classList.remove('locked'));
+  alert('Pro activated! Connect Stripe to enable real payments.');
+}
+
+function stopSpeech() {
+  window.speechSynthesis.cancel();
+  isSpeaking = false;
+  const btn = document.getElementById('tts-btn');
+  if (btn) { btn.textContent = 'Listen'; btn.classList.remove('playing'); }
+  const bar = document.getElementById('progress-bar');
+  if (bar) bar.style.width = '0%';
+}
+
+function toggleSpeech() {
+  if (isSpeaking) { stopSpeech(); return; }
+  if (!outputText) return;
+  const speed = parseFloat(document.getElementById('tts-speed')?.value) || 1;
+  utterance = new SpeechSynthesisUtterance(outputText);
+  utterance.rate = speed;
+  const btn = document.getElementById('tts-btn');
+  const bar = document.getElementById('progress-bar');
+  isSpeaking = true;
+  btn.textContent = 'Stop'; btn.classList.add('playing');
+  utterance.onboundary = (e) => { if (bar) bar.style.width = Math.round((e.charIndex / outputText.length) * 100) + '%'; };
+  utterance.onend = () => {
+    isSpeaking = false;
+    if (btn) { btn.textContent = 'Listen'; btn.classList.remove('playing'); }
+    if (bar) { bar.style.width = '100%'; setTimeout(() => { if(bar) bar.style.width = '0%'; }, 600); }
+  };
+  window.speechSynthesis.speak(utterance);
+}
+
+function updateSpeed() {
+  const val = parseFloat(document.getElementById('tts-speed').value);
+  document.getElementById('speed-val').textContent = val.toFixed(1) + 'x';
+  if (isSpeaking) { stopSpeech(); toggleSpeech(); }
+}
+
+function copyOutput() {
+  navigator.clipboard.writeText(outputText).then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+  });
+}
+
+function renderSummary(text) {
+  outputText = text;
+  document.getElementById('output-area').innerHTML = `
+    <div class="output-card">
+      <div class="progress-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+      <div class="output-text">${text}</div>
+      <div class="tts-bar">
+        <button class="tts-btn" id="tts-btn" onclick="toggleSpeech()">Listen</button>
+        <div class="tts-speed">
+          <span>Speed</span>
+          <input type="range" id="tts-speed" min="0.5" max="2" step="0.1" value="1" oninput="updateSpeed()">
+          <span class="speed-val" id="speed-val">1.0x</span>
+        </div>
+        <button class="copy-btn" id="copy-btn" onclick="copyOutput()">Copy</button>
+      </div>
+    </div>`;
+}
+
+function renderInfographic(data) {
+  const stats = (data.stats||[]).map(s=>`<div class="ig-stat"><div class="ig-stat-num">${s.value}</div><div class="ig-stat-label">${s.label}</div></div>`).join('');
+  const sections = (data.sections||[]).map(s=>`<div class="ig-section"><div class="ig-section-title">${s.title}</div><div class="ig-points">${(s.points||[]).map(p=>`<div class="ig-point"><div class="ig-dot"></div><span>${p}</span></div>`).join('')}</div></div>`).join('');
+  document.getElementById('output-area').innerHTML = `
+    <div class="infographic">
+      <div class="ig-header">
+        <div class="ig-title">${data.title||''}</div>
+        ${data.subtitle?`<div class="ig-subtitle">${data.subtitle}</div>`:''}
+      </div>
+      <div class="ig-body">
+        ${stats?`<div class="ig-stat-row">${stats}</div>`:''}
+        ${sections}
+        ${data.takeaway?`<div class="ig-takeaway">${data.takeaway}</div>`:''}
+      </div>
+      <div class="ig-footer"><button class="copy-btn" id="copy-btn" onclick="copyOutput()">Copy text</button></div>
+    </div>`;
+  outputText = [data.title, data.subtitle, ...(data.sections||[]).flatMap(s=>[s.title,...s.points]), data.takeaway].filter(Boolean).join('\n');
+}
+
+function renderCurrentCard() {
+  if (!cards.length) return;
+  const card = cards[cardIndex];
+  const dots = cards.map((_,i)=>`<div class="dot${i===cardIndex?' active':''}"></div>`).join('');
+  document.getElementById('output-area').innerHTML = `
+    <div class="flashcard-area">
+      <div class="fc-header">
+        <span class="fc-counter">${cardIndex+1} / ${cards.length}</span>
+        <div class="fc-nav">
+          <button onclick="prevCard()" ${cardIndex===0?'disabled':''}>Prev</button>
+          <button onclick="nextCard()" ${cardIndex===cards.length-1?'disabled':''}>Next</button>
+        </div>
+      </div>
+      <div class="flashcard" onclick="flipCard()">
+        <div class="fc-label" id="fc-label">Question</div>
+        <div class="fc-content">${card.q}</div>
+        <div class="fc-answer" id="fc-a">${card.a}</div>
+        <div class="fc-hint" id="fc-hint">Tap to reveal answer</div>
+      </div>
+      <div class="fc-dots">${dots}</div>
+    </div>`;
+}
+
+function flipCard() {
+  const ans = document.getElementById('fc-a'), hint = document.getElementById('fc-hint'), label = document.getElementById('fc-label');
+  const showing = ans.style.display === 'block';
+  ans.style.display = showing ? 'none' : 'block';
+  hint.textContent = showing ? 'Tap to reveal answer' : 'Tap to hide answer';
+  label.textContent = showing ? 'Question' : 'Answer';
+}
+
+function nextCard() { if (cardIndex < cards.length-1) { cardIndex++; renderCurrentCard(); } }
+function prevCard() { if (cardIndex > 0) { cardIndex--; renderCurrentCard(); } }
+
+const systemPrompts = {
+  summary: `You are a note-organizing assistant. Turn raw messy text into a clean structured summary. Detect the language of the input and respond in the same language. Format: 1-sentence overview, 2-4 labeled sections with bullet points, end with a key takeaway. Be concise. Plain text only.`,
+  flashcards: `You are a study assistant. Create 5-8 flashcards from the given text. Detect the language and write in the same language. Respond ONLY with a valid JSON array, no preamble, no backticks. Format: [{"q":"Question","a":"Answer"}, ...]`,
+  infographic: `You are a visual content designer. Extract the most important information and structure it as an infographic. Detect the language and respond in the same language. Respond ONLY with a valid JSON object, no preamble, no backticks. Format: {"title":"Short title (max 8 words)","subtitle":"One-line context","stats":[{"value":"key number","label":"what it means"}],"sections":[{"title":"Section name","points":["point","point"]}],"takeaway":"One sentence insight"} Include 2-4 stats only if numbers exist. Include 2-3 sections with 2-3 points each.`
+};
+
+async function runTool() {
+  const input = getInputText();
+  if (!input) return;
+  stopSpeech();
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  btn.textContent = 'Thinking...';
+  const labels = { summary: 'Organizing your thoughts...', flashcards: 'Generating flashcards...', infographic: 'Building infographic...' };
+  document.getElementById('output-area').innerHTML = `<div class="loading-msg">${labels[currentTool]}</div>`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, system: systemPrompts[currentTool], messages: [{ role: 'user', content: input.slice(0, 8000) }] })
+    });
+    const data = await res.json();
+    const text = data.content?.find(b => b.type === 'text')?.text || '';
+    if (currentTool === 'flashcards') {
+      try { const p = JSON.parse(text.replace(/```json|```/g,'').trim()); cards = p; cardIndex = 0; renderCurrentCard(); saveToHistory(input, text, 'flashcards'); }
+      catch { renderSummary('Could not parse flashcards. Try again.'); }
+    } else if (currentTool === 'infographic') {
+      try { const p = JSON.parse(text.replace(/```json|```/g,'').trim()); renderInfographic(p); saveToHistory(input, text, 'infographic'); }
+      catch { renderSummary('Could not parse infographic. Try again.'); }
+    } else {
+      renderSummary(text); saveToHistory(input, text, 'summary');
+    }
+  } catch(e) {
+    document.getElementById('output-area').innerHTML = `<div class="loading-msg">Could not connect. Please try again.</div>`;
+  }
+
+  btn.disabled = false;
+  const runLabels = { summary: 'Organize my thoughts', flashcards: 'Generate flashcards', infographic: 'Create infographic' };
+  btn.textContent = runLabels[currentTool];
+}
+</script>
+</body>
+</html>
