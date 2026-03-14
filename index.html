@@ -485,7 +485,7 @@ async function runTool() {
   try {
     const res = await fetch('/api/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json',   },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, system: systemPrompts[currentTool], messages: [{ role: 'user', content: input.slice(0, 8000) }] })
     });
     const data = await res.json();
